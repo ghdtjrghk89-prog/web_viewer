@@ -3,41 +3,25 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>웹 뷰어 (다크모드 & 구글 드라이브)</title>
+    <title>웹 뷰어 (자동 로그인 & 이어보기)</title>
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-    
     <script async defer src="https://apis.google.com/js/api.js" onload="gapiLoaded()"></script>
     <script async defer src="https://accounts.google.com/gsi/client" onload="gisLoaded()"></script>
 
     <style>
-        /* 🌙 다크모드 기본 적용 */
         body { font-family: 'Malgun Gothic', sans-serif; background-color: #121212; color: #e0e0e0; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
-        
-        .controls { 
-            margin-bottom: 20px; padding: 15px; background-color: #1e1e1e; 
-            border: 1px solid #333; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.5);
-            display: flex; flex-direction: column; gap: 15px; align-items: center; width: 100%; max-width: 800px; box-sizing: border-box;
-        }
-
+        .controls { margin-bottom: 20px; padding: 15px; background-color: #1e1e1e; border: 1px solid #333; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.5); display: flex; flex-direction: column; gap: 15px; align-items: center; width: 100%; max-width: 800px; box-sizing: border-box; }
         .drive-auth-section { display: flex; gap: 10px; align-items: center; width: 100%; justify-content: center; border-bottom: 1px solid #444; padding-bottom: 15px; }
         .mode-selector { display: flex; gap: 15px; font-size: 14px; font-weight: bold; margin-top: 5px; }
-
-        #viewer-container { 
-            width: 100%; max-width: 800px; background-color: #1e1e1e; 
-            min-height: 500px; border: 1px solid #333; 
-            box-shadow: 0 4px 8px rgba(0,0,0,0.5); 
-            display: flex; flex-direction: column; align-items: center; 
-            padding: 20px; box-sizing: border-box; 
-        }
-
+        #viewer-container { width: 100%; max-width: 800px; background-color: #1e1e1e; min-height: 500px; border: 1px solid #333; box-shadow: 0 4px 8px rgba(0,0,0,0.5); display: flex; flex-direction: column; align-items: center; padding: 20px; box-sizing: border-box; }
+        
         #text-content { display: none; width: 100%; height: 600px; white-space: pre-wrap; line-height: 1.8; font-size: 16px; overflow-y: auto; padding: 10px; color: #ccc; }
         .page-mode-img { max-width: 100%; max-height: 85vh; object-fit: contain; display: none; }
         .scroll-mode-container { display: none; width: 100%; flex-direction: column; align-items: center; gap: 0; }
         .scroll-mode-container img { width: 100%; max-width: 100%; display: block; }
 
         .nav-buttons { margin-top: 15px; display: none; align-items: center; gap: 15px; }
-        
         button { padding: 10px 20px; cursor: pointer; background-color: #3f51b5; color: white; border: none; border-radius: 4px; font-weight: bold; transition: 0.2s;}
         button:hover { background-color: #303f9f; }
         button:disabled { background-color: #555; color: #888; cursor: not-allowed; }
@@ -81,7 +65,7 @@
 
     <script>
         // ==========================================
-        // 🔴 아래 두 항목에 발급받은 키를 꼭 붙여넣으세요!
+        // 🔴 아래 두 곳에 발급받으신 키를 다시 붙여넣어 주세요!
         // ==========================================
         const CLIENT_ID = '771601429632-ovcu0c9ef1rm93tueebeskb4nd4bfp2d.apps.googleusercontent.com';
         const API_KEY = 'AIzaSyBQhmX-BALhVr9alESWkNdHNQfHat1fgeQ';
@@ -94,60 +78,70 @@
         let gisInited = false;
         let accessToken = null;
 
-        // 구글 API 클라이언트 초기화
-        function gapiLoaded() {
-            gapi.load('client:picker', initializeGapiClient);
-        }
+        function gapiLoaded() { gapi.load('client:picker', initializeGapiClient); }
 
         async function initializeGapiClient() {
             await gapi.client.init({ apiKey: API_KEY, discoveryDocs: [DISCOVERY_DOC] });
-            gapiInited = true;
-            checkAuthButton();
+            gapiInited = true; checkAuthButton();
         }
 
-        // 구글 로그인 클라이언트 초기화
         function gisLoaded() {
             tokenClient = google.accounts.oauth2.initTokenClient({
-                client_id: CLIENT_ID,
-                scope: SCOPES,
+                client_id: CLIENT_ID, scope: SCOPES,
                 callback: (resp) => {
                     if (resp.error) return;
                     accessToken = resp.access_token;
-                    document.getElementById('auth-btn').style.display = 'none';
-                    document.getElementById('picker-btn').style.display = 'block';
-                    document.getElementById('login-status').textContent = '구글 드라이브 연결됨';
+                    
+                    // 🌟 핵심: 발급받은 티켓과 '1시간 뒤'의 만료 시간을 로컬 스토리지에 저장합니다.
+                    const expireTime = new Date().getTime() + (3500 * 1000); // 약 1시간(3500초)
+                    localStorage.setItem('gdrive_access_token', accessToken);
+                    localStorage.setItem('gdrive_token_expire', expireTime);
+                    
+                    showLoggedInUI();
                 },
             });
-            gisInited = true;
-            checkAuthButton();
+            gisInited = true; checkAuthButton();
+        }
+
+        // 로그인 상태 UI 업데이트 함수
+        function showLoggedInUI() {
+            document.getElementById('auth-btn').style.display = 'none';
+            document.getElementById('picker-btn').style.display = 'block';
+            document.getElementById('login-status').textContent = '구글 드라이브 연결됨 (최대 1시간 유지)';
         }
 
         function checkAuthButton() {
             if (gapiInited && gisInited) {
+                // 🌟 새로고침 시: 로컬 스토리지에 저장된 티켓이 있는지, 시간은 안 지났는지 확인합니다.
+                const savedToken = localStorage.getItem('gdrive_access_token');
+                const expireTime = localStorage.getItem('gdrive_token_expire');
+                const now = new Date().getTime();
+
+                if (savedToken && expireTime && now < parseInt(expireTime)) {
+                    // 티켓이 유효하면 숨어있던 티켓을 꺼내서 자동 로그인 처리!
+                    accessToken = savedToken;
+                    showLoggedInUI();
+                } else {
+                    // 티켓이 없거나 1시간이 지났다면 원래대로 로그인 버튼 작동
+                    localStorage.removeItem('gdrive_access_token');
+                    localStorage.removeItem('gdrive_token_expire');
+                }
+
                 document.getElementById('auth-btn').onclick = () => {
-                    if (gapi.client.getToken() === null) {
-                        tokenClient.requestAccessToken({prompt: 'consent'});
-                    } else {
-                        tokenClient.requestAccessToken({prompt: ''});
-                    }
+                    tokenClient.requestAccessToken({prompt: ''});
                 };
             }
         }
 
-        // 구글 파일 선택기(Picker) 열기
         document.getElementById('picker-btn').onclick = () => {
+            if (!accessToken) { alert("로그인이 만료되었습니다. 다시 연결해 주세요."); return; }
             const view = new google.picker.View(google.picker.ViewId.DOCS);
             const picker = new google.picker.PickerBuilder()
-                .developerKey(API_KEY)
-                .setAppId(CLIENT_ID.split('-')[0])
-                .setOAuthToken(accessToken)
-                .addView(view)
-                .setCallback(pickerCallback)
-                .build();
+                .developerKey(API_KEY).setAppId(CLIENT_ID.split('-')[0])
+                .setOAuthToken(accessToken).addView(view).setCallback(pickerCallback).build();
             picker.setVisible(true);
         };
 
-        // Picker에서 파일을 선택했을 때 다운로드하여 뷰어로 전달
         async function pickerCallback(data) {
             if (data.action === google.picker.Action.PICKED) {
                 const fileDoc = data.docs[0];
@@ -159,29 +153,31 @@
                         headers: { 'Authorization': `Bearer ${accessToken}` }
                     });
                     
-                    const blob = await response.blob();
-                    
-                    // 파일 이름(확장자)을 위해 Blob 객체에 name 속성 추가
-                    const fileObj = new File([blob], fileName, { type: blob.type });
-
-                    // 기존 뷰어 로직으로 파일 넘기기
-                    resetViewer();
-                    if (fileName.toLowerCase().endsWith('.txt')) {
-                        handleTextFile(fileObj);
-                    } else if (fileName.toLowerCase().endsWith('.cbz') || fileName.toLowerCase().endsWith('.zip')) {
-                        handleCbzFile(fileObj);
-                    } else {
-                        alert("지원하지 않는 파일 형식입니다.");
+                    // 🌟 에러 처리: 혹시 다운로드 중 권한 에러(401)가 나면 로그인이 만료된 것입니다.
+                    if (response.status === 401) {
+                        alert("보안을 위해 접속이 만료되었습니다. 새로고침 후 다시 구글 계정을 연결해 주세요.");
+                        localStorage.removeItem('gdrive_access_token');
+                        localStorage.removeItem('gdrive_token_expire');
+                        location.reload();
+                        return;
                     }
+
+                    const blob = await response.blob();
+                    const fileObj = new File([blob], fileName, { type: blob.type });
+                    fileObj.driveId = fileId; 
+
+                    resetViewer();
+                    if (fileName.toLowerCase().endsWith('.txt')) handleTextFile(fileObj);
+                    else if (fileName.toLowerCase().endsWith('.cbz') || fileName.toLowerCase().endsWith('.zip')) handleCbzFile(fileObj);
+                    else alert("지원하지 않는 파일 형식입니다.");
                 } catch (error) {
-                    console.error("파일 다운로드 에러:", error);
-                    alert("파일을 불러오는 데 실패했습니다.");
+                    console.error(error); alert("파일을 불러오는 데 실패했습니다.");
                 }
             }
         }
 
         // ==========================================
-        // 아래는 2단계에서 작성했던 뷰어 핵심 로직과 동일합니다.
+        // 뷰어 메인 로직 및 이어보기(LocalStorage) 기능
         // ==========================================
         const fileInput = document.getElementById('file-input');
         const textContent = document.getElementById('text-content');
@@ -196,6 +192,7 @@
         let imageFiles = [];
         let currentIndex = 0;
         let currentMode = 'page';
+        let currentFileIdentifier = ''; 
 
         modeRadios.forEach(radio => {
             radio.addEventListener('change', (e) => {
@@ -213,22 +210,33 @@
         });
 
         function resetViewer() {
-            textContent.style.display = 'none';
-            imageContent.style.display = 'none';
-            scrollContainer.style.display = 'none';
-            navButtons.style.display = 'none';
-            scrollContainer.innerHTML = '';
-            imageFiles = [];
-            currentIndex = 0;
+            textContent.style.display = 'none'; imageContent.style.display = 'none';
+            scrollContainer.style.display = 'none'; navButtons.style.display = 'none';
+            scrollContainer.innerHTML = ''; imageFiles = []; currentIndex = 0; currentFileIdentifier = '';
+            textContent.onscroll = null; 
         }
 
         function handleTextFile(file) {
+            currentFileIdentifier = file.driveId || file.name; 
             const reader = new FileReader();
-            reader.onload = (e) => { textContent.textContent = e.target.result; textContent.style.display = 'block'; };
+            reader.onload = (e) => { 
+                textContent.textContent = e.target.result; 
+                textContent.style.display = 'block'; 
+
+                const savedScroll = localStorage.getItem('viewer_txt_' + currentFileIdentifier);
+                if (savedScroll !== null && confirm("이전에 읽던 위치가 있습니다. 이어서 보시겠습니까?")) {
+                    setTimeout(() => { textContent.scrollTop = parseFloat(savedScroll); }, 100);
+                }
+
+                textContent.onscroll = () => {
+                    localStorage.setItem('viewer_txt_' + currentFileIdentifier, textContent.scrollTop);
+                };
+            };
             reader.readAsText(file, 'utf-8');
         }
 
         async function handleCbzFile(file) {
+            currentFileIdentifier = file.driveId || file.name;
             try {
                 const zip = new JSZip();
                 const zipContent = await zip.loadAsync(file);
@@ -236,7 +244,18 @@
                     if (relativePath.match(/\.(jpg|jpeg|png|gif|webp)$/i) && !zipEntry.dir) imageFiles.push(zipEntry);
                 });
                 imageFiles.sort((a, b) => a.name.localeCompare(b.name, undefined, {numeric: true}));
-                if (imageFiles.length > 0) refreshViewer();
+                
+                if (imageFiles.length > 0) {
+                    const savedIndex = localStorage.getItem('viewer_cbz_' + currentFileIdentifier);
+                    if (savedIndex !== null && confirm("이전에 읽던 위치가 있습니다. 이어서 보시겠습니까?")) {
+                        currentIndex = parseInt(savedIndex, 10);
+                    } else {
+                        currentIndex = 0;
+                    }
+                    refreshViewer();
+                } else {
+                    alert("이미지 파일이 없습니다.");
+                }
             } catch (error) { alert("파일 처리 오류가 발생했습니다."); }
         }
 
@@ -257,6 +276,8 @@
             pageInfo.textContent = `${index + 1} / ${imageFiles.length}`;
             prevBtn.disabled = (index === 0); nextBtn.disabled = (index === imageFiles.length - 1);
             window.scrollTo(0, 0);
+
+            localStorage.setItem('viewer_cbz_' + currentFileIdentifier, index);
         }
 
         async function renderScrollMode() {
