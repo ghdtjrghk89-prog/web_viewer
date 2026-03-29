@@ -3,27 +3,43 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>웹 뷰어 (연속 보기 지원)</title>
+    <title>웹 뷰어 (자체 드라이브 탐색기 적용)</title>
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-    <script async defer src="https://apis.google.com/js/api.js" onload="gapiLoaded()"></script>
     <script async defer src="https://accounts.google.com/gsi/client" onload="gisLoaded()"></script>
 
     <style>
         body { font-family: 'Malgun Gothic', sans-serif; background-color: #121212; color: #e0e0e0; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
+        
+        /* 🌟 컨트롤 패널 (상단 메뉴) */
         .controls { margin-bottom: 20px; padding: 15px; background-color: #1e1e1e; border: 1px solid #333; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.5); display: flex; flex-direction: column; gap: 15px; align-items: center; width: 100%; max-width: 800px; box-sizing: border-box; }
         .drive-auth-section { display: flex; gap: 10px; align-items: center; width: 100%; justify-content: center; border-bottom: 1px solid #444; padding-bottom: 15px; flex-wrap: wrap; text-align: center; }
-        .mode-selector { display: flex; gap: 15px; font-size: 14px; font-weight: bold; margin-top: 5px; }
+        .mode-selector { display: flex; gap: 15px; font-size: 14px; font-weight: bold; margin-top: 5px; align-items: center; justify-content: center; width: 100%;}
         
-        /* 🌟 시리즈 이동 네비게이션 바 (이전 화 / 다음 화) */
+        /* 🌟 마지막으로 본 회차 표시 패널 */
+        .last-read-panel { width: 100%; max-width: 800px; background-color: #2c3e50; color: #ecf0f1; padding: 12px 20px; border-radius: 8px; margin-bottom: 15px; box-sizing: border-box; font-size: 15px; font-weight: bold; text-align: center; border: 1px solid #34495e; box-shadow: 0 2px 5px rgba(0,0,0,0.3); }
+        .last-read-title { color: #f1c40f; margin-left: 5px; }
+
+        /* 🌟 드라이브 자체 탐색기 (라이브러리) */
+        .library-panel { width: 100%; max-width: 800px; background-color: #1e1e1e; border: 1px solid #333; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.5); display: none; flex-direction: column; overflow: hidden; margin-bottom: 20px; }
+        .lib-header { display: flex; align-items: center; background-color: #2c2c2c; padding: 12px 15px; border-bottom: 1px solid #444; font-weight: bold; gap: 15px; }
+        .lib-list { display: flex; flex-direction: column; max-height: 60vh; overflow-y: auto; }
+        .lib-item { padding: 15px 20px; border-bottom: 1px solid #333; cursor: pointer; display: flex; align-items: center; gap: 10px; font-size: 15px; transition: background-color 0.2s; }
+        .lib-item:hover { background-color: #2a2a2a; }
+        .lib-item:last-child { border-bottom: none; }
+        .folder-icon { font-size: 1.2em; }
+
+        /* 🌟 시리즈 이동 네비게이션 바 */
         .episode-nav { display: none; width: 100%; max-width: 800px; justify-content: space-between; align-items: center; background-color: #2c2c2c; padding: 10px 15px; border-radius: 8px; margin-bottom: 15px; box-sizing: border-box; border: 1px solid #444; }
         .episode-title { font-size: 14px; color: #aaa; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 50%; text-align: center; }
-        .ep-btn { background-color: #555; padding: 8px 15px; font-size: 13px; border-radius: 4px; }
+        .ep-btn { background-color: #555; padding: 8px 15px; font-size: 13px; border-radius: 4px; border: none; color: white; cursor: pointer; font-weight: bold;}
         .ep-btn:hover:not(:disabled) { background-color: #777; }
         .ep-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+        .back-to-list-btn { background-color: #d84315; }
+        .back-to-list-btn:hover { background-color: #bf360c; }
 
-        #viewer-container { width: 100%; max-width: 800px; background-color: #1e1e1e; min-height: 500px; border: 1px solid #333; box-shadow: 0 4px 8px rgba(0,0,0,0.5); display: flex; flex-direction: column; align-items: center; padding: 20px; box-sizing: border-box; }
-        
+        /* 🌟 뷰어 영역 */
+        #viewer-container { width: 100%; max-width: 800px; background-color: #1e1e1e; min-height: 500px; border: 1px solid #333; box-shadow: 0 4px 8px rgba(0,0,0,0.5); display: none; flex-direction: column; align-items: center; padding: 20px; box-sizing: border-box; margin-bottom: 20px; }
         #text-content { display: none; width: 100%; height: 600px; white-space: pre-wrap; line-height: 1.8; font-size: 16px; overflow-y: auto; padding: 10px; color: #ccc; }
         .page-mode-img { max-width: 100%; max-height: 85vh; object-fit: contain; display: none; }
         .scroll-mode-container { display: none; width: 100%; flex-direction: column; align-items: center; gap: 0; }
@@ -40,8 +56,7 @@
 
         @media (max-width: 800px) {
             body { padding: 0; background-color: #000; }
-            .controls { border-radius: 0; border: none; margin-bottom: 0; padding: 10px; }
-            .episode-nav { border-radius: 0; border-left: none; border-right: none; margin-bottom: 0; }
+            .controls, .last-read-panel, .library-panel, .episode-nav { border-radius: 0; border-left: none; border-right: none; margin-bottom: 0; }
             #viewer-container { padding: 0; border: none; box-shadow: none; min-height: 100vh; background-color: #000; }
             #text-content { padding: 15px; height: 80vh; }
             .page-mode-img { max-height: 90vh; }
@@ -54,19 +69,32 @@
     <div class="controls">
         <div class="drive-auth-section">
             <button id="auth-btn" class="google-btn">구글 계정 연결하기</button>
-            <button id="picker-btn" style="display: none;">드라이브에서 파일 열기</button>
             <span id="login-status" style="font-size: 0.9em; color: #aaa;">로그인되지 않음</span>
         </div>
 
         <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: center;">
-            <span style="font-size: 0.9em;">PC에서 열기:</span>
+            <span style="font-size: 0.9em;">PC 파일 선택:</span>
             <input type="file" id="file-input" accept=".cbz, .zip, .txt" style="color: #e0e0e0; max-width: 200px;">
         </div>
         
         <div class="mode-selector">
             <label><input type="radio" name="view-mode" value="page" checked> 페이지 보기</label>
             <label><input type="radio" name="view-mode" value="scroll"> 웹툰 보기 (스크롤)</label>
+            <button id="top-back-to-list-btn" class="ep-btn back-to-list-btn" style="display: none; margin-left: 10px;">📂 드라이브 목록</button>
         </div>
+    </div>
+
+    <div class="last-read-panel" id="last-read-panel">
+        🔖 마지막으로 본 회차: <span id="last-read-title" class="last-read-title">기록 없음</span>
+    </div>
+
+    <div class="library-panel" id="library-panel">
+        <div class="lib-header">
+            <button id="lib-back-btn" class="ep-btn" style="display:none; padding: 5px 10px;">⬅️ 상위 폴더</button>
+            <span id="lib-current-path">내 드라이브</span>
+        </div>
+        <div id="library-loading" style="display:none; text-align:center; padding: 30px; color: #aaa;">데이터를 불러오는 중입니다...</div>
+        <div id="library-list" class="lib-list"></div>
     </div>
 
     <div class="episode-nav" id="episode-nav">
@@ -88,27 +116,26 @@
     </div>
 
     <script>
-        // 발급받으신 키를 유지했습니다.
         const CLIENT_ID = '771601429632-ovcu0c9ef1rm93tueebeskb4nd4bfp2d.apps.googleusercontent.com';
-        const API_KEY = 'AIzaSyBQhmX-BALhVr9alESWkNdHNQfHat1fgeQ';
-        
-        const DISCOVERY_DOC = 'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest';
         const SCOPES = 'https://www.googleapis.com/auth/drive.readonly';
 
         let tokenClient;
-        let gapiInited = false;
-        let gisInited = false;
         let accessToken = null;
 
-        // 🌟 시리즈(플레이리스트) 관리를 위한 전역 변수
-        let currentPlaylist = [];
+        // 라이브러리 (탐색기) 관리 변수
+        let driveHistory = []; // 폴더 이동 기록 저장
+        let currentPlaylist = []; // 현재 폴더의 만화 파일 목록
         let currentPlaylistIndex = -1;
 
-        function gapiLoaded() { gapi.load('client:picker', initializeGapiClient); }
+        document.addEventListener('DOMContentLoaded', () => {
+            const savedTitle = localStorage.getItem('last_read_episode_title');
+            if (savedTitle) document.getElementById('last-read-title').textContent = savedTitle;
+        });
 
-        async function initializeGapiClient() {
-            await gapi.client.init({ apiKey: API_KEY, discoveryDocs: [DISCOVERY_DOC] });
-            gapiInited = true; checkAuthButton();
+        function saveLastReadTitle(fileName) {
+            const cleanName = fileName.replace(/\.[^/.]+$/, "");
+            localStorage.setItem('last_read_episode_title', cleanName);
+            document.getElementById('last-read-title').textContent = cleanName;
         }
 
         function gisLoaded() {
@@ -123,138 +150,205 @@
                     showLoggedInUI();
                 },
             });
-            gisInited = true; checkAuthButton();
-        }
-
-        function showLoggedInUI() {
-            document.getElementById('auth-btn').style.display = 'none';
-            document.getElementById('picker-btn').style.display = 'block';
-            document.getElementById('login-status').textContent = '구글 드라이브 연결됨';
+            checkAuthButton();
         }
 
         function checkAuthButton() {
-            if (gapiInited && gisInited) {
-                const savedToken = localStorage.getItem('gdrive_access_token');
-                const expireTime = localStorage.getItem('gdrive_token_expire');
-                const now = new Date().getTime();
+            const savedToken = localStorage.getItem('gdrive_access_token');
+            const expireTime = localStorage.getItem('gdrive_token_expire');
+            const now = new Date().getTime();
 
-                if (savedToken && expireTime && now < parseInt(expireTime)) {
-                    accessToken = savedToken;
-                    showLoggedInUI();
-                }
-
-                document.getElementById('auth-btn').onclick = () => { tokenClient.requestAccessToken({prompt: ''}); };
+            if (savedToken && expireTime && now < parseInt(expireTime)) {
+                accessToken = savedToken;
+                showLoggedInUI();
             }
+
+            document.getElementById('auth-btn').onclick = () => { tokenClient.requestAccessToken({prompt: ''}); };
         }
 
-        document.getElementById('picker-btn').onclick = () => {
-            if (!accessToken) { alert("로그인이 만료되었습니다. 다시 연결해 주세요."); return; }
-            try {
-                const view = new google.picker.View(google.picker.ViewId.DOCS);
-                const picker = new google.picker.PickerBuilder()
-                    .setDeveloperKey(API_KEY).setAppId('771601429632').setOAuthToken(accessToken)
-                    .addView(view).setCallback(pickerCallback).build();
-                picker.setVisible(true);
-            } catch (error) { alert("파일 창을 여는 중 에러가 발생했습니다."); }
-        };
-
-        // 🌟 파일을 선택했을 때: 폴더를 스캔하여 플레이리스트를 먼저 만듭니다.
-        async function pickerCallback(data) {
-            if (data.action === google.picker.Action.PICKED) {
-                const fileDoc = data.docs[0];
-                await loadEpisodeFromDrive(fileDoc.id, fileDoc.name, true);
-            }
-        }
-
-        // 🌟 특정 드라이브 파일을 로드하고 필요시 폴더 스캔
-        async function loadEpisodeFromDrive(fileId, fileName, scanFolder = false) {
-            document.getElementById('ep-current-title').textContent = "로딩 중...";
+        // 🌟 로그인 성공 시: 라이브러리(탐색기) 열기
+        function showLoggedInUI() {
+            document.getElementById('auth-btn').style.display = 'none';
+            document.getElementById('login-status').textContent = '구글 드라이브 연결됨';
             
+            // 뷰어 닫고 라이브러리 띄우기
+            closeViewer();
+            
+            // 최상위 루트(root) 폴더 읽어오기
+            if (driveHistory.length === 0) {
+                navigateToFolder('root', '내 드라이브', false);
+            }
+        }
+
+        // 🌟 드라이브 탐색기 코어 로직
+        async function navigateToFolder(folderId, folderName, isBack = false) {
+            const loading = document.getElementById('library-loading');
+            const listEl = document.getElementById('library-list');
+            
+            loading.style.display = 'block';
+            listEl.innerHTML = '';
+
             try {
-                // 폴더 스캔이 필요한 경우 (최초 파일 선택 시)
-                if (scanFolder) {
-                    // 1. 선택한 파일이 속한 폴더(parent) ID 찾기
-                    const metaRes = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?fields=parents`, {
-                        headers: { 'Authorization': `Bearer ${accessToken}` }
-                    });
-                    const metaData = await metaRes.json();
-                    
-                    if (metaData.parents && metaData.parents.length > 0) {
-                        const parentId = metaData.parents[0];
-                        // 2. 해당 폴더 안의 모든 파일을 이름순(orderBy=name)으로 가져오기
-                        const query = encodeURIComponent(`'${parentId}' in parents and trashed=false`);
-                        const listRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${query}&orderBy=name&fields=files(id,name)&pageSize=1000`, {
-                            headers: { 'Authorization': `Bearer ${accessToken}` }
-                        });
-                        const listData = await listRes.json();
-                        
-                        // 3. 만화책 및 텍스트 파일만 추려내어 플레이리스트 완성
-                        currentPlaylist = listData.files.filter(f => f.name.toLowerCase().match(/\.(cbz|zip|txt)$/));
-                    }
-                }
-
-                // 현재 파일이 플레이리스트 몇 번째인지 확인
-                currentPlaylistIndex = currentPlaylist.findIndex(f => f.id === fileId);
-                updateEpisodeNav(fileName);
-
-                // 실제 파일 다운로드 및 표시
-                const response = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+                const query = encodeURIComponent(`'${folderId}' in parents and trashed=false`);
+                // 폴더가 먼저 나오게 정렬 (orderBy=folder,name)
+                const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${query}&orderBy=folder,name&fields=files(id,name,mimeType)&pageSize=1000`, {
                     headers: { 'Authorization': `Bearer ${accessToken}` }
                 });
                 
-                if (response.status === 401) {
+                if (res.status === 401) {
                     alert("인증이 만료되었습니다. 새로고침 후 다시 연결해 주세요.");
                     localStorage.clear(); location.reload(); return;
                 }
 
+                const data = await res.json();
+                
+                if (!isBack) {
+                    driveHistory.push({id: folderId, name: folderName});
+                }
+                
+                updateLibraryHeader();
+                renderLibrary(data.files);
+
+            } catch (error) {
+                console.error(error); alert("폴더 내용을 읽어오지 못했습니다.");
+            } finally {
+                loading.style.display = 'none';
+            }
+        }
+
+        function updateLibraryHeader() {
+            const backBtn = document.getElementById('lib-back-btn');
+            const pathText = document.getElementById('lib-current-path');
+            
+            if (driveHistory.length > 1) {
+                backBtn.style.display = 'block';
+                // 현재 폴더 이름 표시
+                pathText.textContent = driveHistory[driveHistory.length - 1].name;
+            } else {
+                backBtn.style.display = 'none';
+                pathText.textContent = '내 드라이브 (최상위)';
+            }
+        }
+
+        document.getElementById('lib-back-btn').onclick = () => {
+            if (driveHistory.length > 1) {
+                driveHistory.pop(); // 현재 위치 삭제
+                const prev = driveHistory[driveHistory.length - 1]; // 이전 위치 가져오기
+                navigateToFolder(prev.id, prev.name, true);
+            }
+        };
+
+        // 🌟 라이브러리 화면 그리기
+        function renderLibrary(files) {
+            const listEl = document.getElementById('library-list');
+            
+            // 폴더 및 지원하는 만화/텍스트 파일만 필터링
+            const validItems = files.filter(f => {
+                if (f.mimeType === 'application/vnd.google-apps.folder') return true;
+                if (f.name.toLowerCase().match(/\.(cbz|zip|txt)$/)) return true;
+                return false;
+            });
+
+            // 현재 폴더의 파일들만 모아서 플레이리스트 자동 생성! (폴더 제외)
+            currentPlaylist = validItems.filter(f => f.mimeType !== 'application/vnd.google-apps.folder');
+
+            if (validItems.length === 0) {
+                listEl.innerHTML = '<div style="padding: 20px; text-align: center; color: #888;">이 폴더에는 표시할 만화나 폴더가 없습니다.</div>';
+                return;
+            }
+
+            validItems.forEach(item => {
+                const isFolder = item.mimeType === 'application/vnd.google-apps.folder';
+                const div = document.createElement('div');
+                div.className = 'lib-item';
+                div.innerHTML = `<span class="folder-icon">${isFolder ? '📁' : '📖'}</span> <span>${item.name}</span>`;
+                
+                div.onclick = () => {
+                    if (isFolder) {
+                        // 폴더를 누르면 해당 폴더로 진입
+                        navigateToFolder(item.id, item.name, false);
+                    } else {
+                        // 파일을 누르면 뷰어 실행!
+                        openViewerWithFile(item.id, item.name);
+                    }
+                };
+                listEl.appendChild(div);
+            });
+        }
+
+        // 🌟 뷰어 실행 로직 (탐색기 숨기기)
+        async function openViewerWithFile(fileId, fileName) {
+            document.getElementById('library-panel').style.display = 'none';
+            document.getElementById('last-read-panel').style.display = 'none';
+            document.getElementById('viewer-container').style.display = 'flex';
+            document.getElementById('episode-nav').style.display = 'flex';
+            document.getElementById('top-back-to-list-btn').style.display = 'block';
+
+            document.getElementById('ep-current-title').textContent = "파일 다운로드 중...";
+            
+            // 플레이리스트 인덱스 세팅
+            currentPlaylistIndex = currentPlaylist.findIndex(f => f.id === fileId);
+            updateEpisodeNav(fileName);
+
+            try {
+                const response = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, { headers: { 'Authorization': `Bearer ${accessToken}` } });
                 const blob = await response.blob();
                 const fileObj = new File([blob], fileName, { type: blob.type });
-                fileObj.driveId = fileId; 
 
-                resetViewer();
+                saveLastReadTitle(fileName);
+                resetViewerState();
+
                 if (fileName.toLowerCase().endsWith('.txt')) handleTextFile(fileObj);
                 else if (fileName.toLowerCase().endsWith('.cbz') || fileName.toLowerCase().endsWith('.zip')) handleCbzFile(fileObj);
 
             } catch (error) {
-                console.error(error); alert("파일을 불러오는 데 실패했습니다.");
+                console.error(error); alert("파일 다운로드에 실패했습니다.");
             }
         }
 
-        // 🌟 이전/다음 화 버튼 상태 업데이트
+        // 🌟 목록으로 돌아가기 (뷰어 닫기)
+        function closeViewer() {
+            resetViewerState();
+            document.getElementById('viewer-container').style.display = 'none';
+            document.getElementById('episode-nav').style.display = 'none';
+            document.getElementById('top-back-to-list-btn').style.display = 'none';
+            
+            document.getElementById('last-read-panel').style.display = 'block';
+            if(accessToken) document.getElementById('library-panel').style.display = 'flex';
+        }
+
+        document.getElementById('top-back-to-list-btn').onclick = closeViewer;
+
+
+        // ==========================================
+        // 뷰어 코어 로직 및 다음화 버튼 관리
+        // ==========================================
         function updateEpisodeNav(fileName) {
-            const nav = document.getElementById('episode-nav');
             const title = document.getElementById('ep-current-title');
             const prevBtn = document.getElementById('ep-prev-btn');
             const nextBtn = document.getElementById('ep-next-btn');
 
             if (currentPlaylist.length > 0) {
-                nav.style.display = 'flex';
-                title.textContent = fileName.replace(/\.[^/.]+$/, ""); // 확장자 제거하고 제목 표시
+                title.textContent = fileName.replace(/\.[^/.]+$/, "");
                 prevBtn.disabled = (currentPlaylistIndex <= 0);
                 nextBtn.disabled = (currentPlaylistIndex === -1 || currentPlaylistIndex >= currentPlaylist.length - 1);
-            } else {
-                nav.style.display = 'none'; // PC 파일 열기 등 플레이리스트가 없으면 숨김
             }
         }
 
-        // 🌟 이전/다음 화 클릭 이벤트
         document.getElementById('ep-prev-btn').onclick = () => {
             if (currentPlaylistIndex > 0) {
                 const prevFile = currentPlaylist[currentPlaylistIndex - 1];
-                loadEpisodeFromDrive(prevFile.id, prevFile.name, false);
+                openViewerWithFile(prevFile.id, prevFile.name);
             }
         };
 
         document.getElementById('ep-next-btn').onclick = () => {
             if (currentPlaylistIndex < currentPlaylist.length - 1) {
                 const nextFile = currentPlaylist[currentPlaylistIndex + 1];
-                loadEpisodeFromDrive(nextFile.id, nextFile.name, false);
+                openViewerWithFile(nextFile.id, nextFile.name);
             }
         };
 
-        // ==========================================
-        // 뷰어 메인 로직 
-        // ==========================================
         const fileInput = document.getElementById('file-input');
         const textContent = document.getElementById('text-content');
         const imageContent = document.getElementById('image-content');
@@ -268,7 +362,6 @@
         let imageFiles = [];
         let currentIndex = 0;
         let currentMode = 'page';
-        let currentFileIdentifier = ''; 
 
         modeRadios.forEach(radio => {
             radio.addEventListener('change', (e) => {
@@ -277,17 +370,25 @@
             });
         });
 
-        // PC 파일 선택 처리 (플레이리스트 초기화)
+        // PC 로컬 파일 열기 처리
         fileInput.addEventListener('change', async (event) => {
             const file = event.target.files[0];
             if (!file) return;
-            currentPlaylist = []; currentPlaylistIndex = -1; updateEpisodeNav("");
-            resetViewer();
+            
+            // PC 파일은 플레이리스트 기능 끄기
+            currentPlaylist = []; currentPlaylistIndex = -1; 
+            document.getElementById('library-panel').style.display = 'none';
+            document.getElementById('viewer-container').style.display = 'flex';
+            document.getElementById('episode-nav').style.display = 'none';
+            
+            saveLastReadTitle(file.name);
+            resetViewerState();
+            
             if (file.name.toLowerCase().endsWith('.txt')) handleTextFile(file);
             else if (file.name.toLowerCase().endsWith('.cbz') || file.name.toLowerCase().endsWith('.zip')) handleCbzFile(file);
         });
 
-        function resetViewer() {
+        function resetViewerState() {
             textContent.style.display = 'none'; imageContent.style.display = 'none';
             scrollContainer.style.display = 'none'; navButtons.style.display = 'none';
             scrollContainer.innerHTML = ''; imageFiles = []; currentIndex = 0;
@@ -295,22 +396,15 @@
         }
 
         function handleTextFile(file) {
-            currentFileIdentifier = file.driveId || file.name; 
             const reader = new FileReader();
             reader.onload = (e) => { 
                 textContent.textContent = e.target.result; 
                 textContent.style.display = 'block'; 
-                const savedScroll = localStorage.getItem('viewer_txt_' + currentFileIdentifier);
-                if (savedScroll !== null && confirm("이전 위치에서 이어서 보시겠습니까?")) {
-                    setTimeout(() => { textContent.scrollTop = parseFloat(savedScroll); }, 100);
-                }
-                textContent.onscroll = () => { localStorage.setItem('viewer_txt_' + currentFileIdentifier, textContent.scrollTop); };
             };
             reader.readAsText(file, 'utf-8');
         }
 
         async function handleCbzFile(file) {
-            currentFileIdentifier = file.driveId || file.name;
             try {
                 const zip = new JSZip();
                 const zipContent = await zip.loadAsync(file);
@@ -319,8 +413,6 @@
                 });
                 imageFiles.sort((a, b) => a.name.localeCompare(b.name, undefined, {numeric: true}));
                 if (imageFiles.length > 0) {
-                    const savedIndex = localStorage.getItem('viewer_cbz_' + currentFileIdentifier);
-                    if (savedIndex !== null && confirm("이전 위치에서 이어서 보시겠습니까?")) { currentIndex = parseInt(savedIndex, 10); }
                     refreshViewer();
                 }
             } catch (error) { alert("파일 처리 오류"); }
@@ -343,7 +435,6 @@
             pageInfo.textContent = `${index + 1} / ${imageFiles.length}`;
             prevBtn.disabled = (index === 0); nextBtn.disabled = (index === imageFiles.length - 1);
             window.scrollTo(0, 0);
-            localStorage.setItem('viewer_cbz_' + currentFileIdentifier, index);
         }
 
         async function renderScrollMode() {
@@ -355,14 +446,14 @@
                 scrollContainer.appendChild(img);
             }
             
-            // 🌟 웹툰 모드 마지막에 '다음 화 보기' 대형 버튼 추가
+            // 🌟 웹툰 모드 마지막에 '다음 화 보기' 버튼 추가
             if (currentPlaylist.length > 0 && currentPlaylistIndex < currentPlaylist.length - 1) {
                 const bigNextBtn = document.createElement('button');
                 bigNextBtn.className = 'next-ep-big-btn';
                 bigNextBtn.textContent = "다음 화 보기 ➡️";
                 bigNextBtn.onclick = () => {
                     const nextFile = currentPlaylist[currentPlaylistIndex + 1];
-                    loadEpisodeFromDrive(nextFile.id, nextFile.name, false);
+                    openViewerWithFile(nextFile.id, nextFile.name);
                 };
                 scrollContainer.appendChild(bigNextBtn);
             }
