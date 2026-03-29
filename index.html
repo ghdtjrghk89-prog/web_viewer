@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>웹 뷰어 (자동 로그인 & 이어보기)</title>
+    <title>웹 뷰어 (최종 완성본)</title>
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script async defer src="https://apis.google.com/js/api.js" onload="gapiLoaded()"></script>
@@ -64,9 +64,7 @@
     </div>
 
     <script>
-        // ==========================================
-        // 🔴 아래 두 곳에 발급받으신 키를 다시 붙여넣어 주세요!
-        // ==========================================
+        // 발급받으신 정보를 여기에 정확히 넣어주세요.
         const CLIENT_ID = '771601429632-ovcu0c9ef1rm93tueebeskb4nd4bfp2d.apps.googleusercontent.com';
         const API_KEY = 'AIzaSyBQhmX-BALhVr9alESWkNdHNQfHat1fgeQ';
         
@@ -91,40 +89,30 @@
                 callback: (resp) => {
                     if (resp.error) return;
                     accessToken = resp.access_token;
-                    
-                    // 🌟 핵심: 발급받은 티켓과 '1시간 뒤'의 만료 시간을 로컬 스토리지에 저장합니다.
-                    const expireTime = new Date().getTime() + (3500 * 1000); // 약 1시간(3500초)
+                    const expireTime = new Date().getTime() + (3500 * 1000); 
                     localStorage.setItem('gdrive_access_token', accessToken);
                     localStorage.setItem('gdrive_token_expire', expireTime);
-                    
                     showLoggedInUI();
                 },
             });
             gisInited = true; checkAuthButton();
         }
 
-        // 로그인 상태 UI 업데이트 함수
         function showLoggedInUI() {
             document.getElementById('auth-btn').style.display = 'none';
             document.getElementById('picker-btn').style.display = 'block';
-            document.getElementById('login-status').textContent = '구글 드라이브 연결됨 (최대 1시간 유지)';
+            document.getElementById('login-status').textContent = '구글 드라이브 연결됨 (v.1)';
         }
 
         function checkAuthButton() {
             if (gapiInited && gisInited) {
-                // 🌟 새로고침 시: 로컬 스토리지에 저장된 티켓이 있는지, 시간은 안 지났는지 확인합니다.
                 const savedToken = localStorage.getItem('gdrive_access_token');
                 const expireTime = localStorage.getItem('gdrive_token_expire');
                 const now = new Date().getTime();
 
                 if (savedToken && expireTime && now < parseInt(expireTime)) {
-                    // 티켓이 유효하면 숨어있던 티켓을 꺼내서 자동 로그인 처리!
                     accessToken = savedToken;
                     showLoggedInUI();
-                } else {
-                    // 티켓이 없거나 1시간이 지났다면 원래대로 로그인 버튼 작동
-                    localStorage.removeItem('gdrive_access_token');
-                    localStorage.removeItem('gdrive_token_expire');
                 }
 
                 document.getElementById('auth-btn').onclick = () => {
@@ -133,13 +121,24 @@
             }
         }
 
+        // 🌟 수정된 파일 선택기 호출 부분 (setDeveloperKey 오타 수정 완료)
         document.getElementById('picker-btn').onclick = () => {
             if (!accessToken) { alert("로그인이 만료되었습니다. 다시 연결해 주세요."); return; }
-            const view = new google.picker.View(google.picker.ViewId.DOCS);
-            const picker = new google.picker.PickerBuilder()
-                .developerKey(API_KEY).setAppId(CLIENT_ID.split('-')[0])
-                .setOAuthToken(accessToken).addView(view).setCallback(pickerCallback).build();
-            picker.setVisible(true);
+            
+            try {
+                const view = new google.picker.View(google.picker.ViewId.DOCS);
+                const picker = new google.picker.PickerBuilder()
+                    .setDeveloperKey(API_KEY)
+                    .setAppId('771601429632') 
+                    .setOAuthToken(accessToken)
+                    .addView(view)
+                    .setCallback(pickerCallback)
+                    .build();
+                picker.setVisible(true);
+            } catch (error) {
+                console.error("Picker Error:", error);
+                alert("파일 창을 여는 중 에러가 발생했습니다.");
+            }
         };
 
         async function pickerCallback(data) {
@@ -153,11 +152,9 @@
                         headers: { 'Authorization': `Bearer ${accessToken}` }
                     });
                     
-                    // 🌟 에러 처리: 혹시 다운로드 중 권한 에러(401)가 나면 로그인이 만료된 것입니다.
                     if (response.status === 401) {
-                        alert("보안을 위해 접속이 만료되었습니다. 새로고침 후 다시 구글 계정을 연결해 주세요.");
-                        localStorage.removeItem('gdrive_access_token');
-                        localStorage.removeItem('gdrive_token_expire');
+                        alert("인증이 만료되었습니다. 새로고침 후 다시 연결해 주세요.");
+                        localStorage.clear();
                         location.reload();
                         return;
                     }
@@ -169,16 +166,10 @@
                     resetViewer();
                     if (fileName.toLowerCase().endsWith('.txt')) handleTextFile(fileObj);
                     else if (fileName.toLowerCase().endsWith('.cbz') || fileName.toLowerCase().endsWith('.zip')) handleCbzFile(fileObj);
-                    else alert("지원하지 않는 파일 형식입니다.");
-                } catch (error) {
-                    console.error(error); alert("파일을 불러오는 데 실패했습니다.");
-                }
+                } catch (error) { alert("파일 로드 실패"); }
             }
         }
 
-        // ==========================================
-        // 뷰어 메인 로직 및 이어보기(LocalStorage) 기능
-        // ==========================================
         const fileInput = document.getElementById('file-input');
         const textContent = document.getElementById('text-content');
         const imageContent = document.getElementById('image-content');
@@ -212,8 +203,7 @@
         function resetViewer() {
             textContent.style.display = 'none'; imageContent.style.display = 'none';
             scrollContainer.style.display = 'none'; navButtons.style.display = 'none';
-            scrollContainer.innerHTML = ''; imageFiles = []; currentIndex = 0; currentFileIdentifier = '';
-            textContent.onscroll = null; 
+            scrollContainer.innerHTML = ''; imageFiles = []; currentIndex = 0;
         }
 
         function handleTextFile(file) {
@@ -222,15 +212,11 @@
             reader.onload = (e) => { 
                 textContent.textContent = e.target.result; 
                 textContent.style.display = 'block'; 
-
                 const savedScroll = localStorage.getItem('viewer_txt_' + currentFileIdentifier);
-                if (savedScroll !== null && confirm("이전에 읽던 위치가 있습니다. 이어서 보시겠습니까?")) {
+                if (savedScroll !== null && confirm("이전 위치에서 이어서 보시겠습니까?")) {
                     setTimeout(() => { textContent.scrollTop = parseFloat(savedScroll); }, 100);
                 }
-
-                textContent.onscroll = () => {
-                    localStorage.setItem('viewer_txt_' + currentFileIdentifier, textContent.scrollTop);
-                };
+                textContent.onscroll = () => { localStorage.setItem('viewer_txt_' + currentFileIdentifier, textContent.scrollTop); };
             };
             reader.readAsText(file, 'utf-8');
         }
@@ -244,19 +230,12 @@
                     if (relativePath.match(/\.(jpg|jpeg|png|gif|webp)$/i) && !zipEntry.dir) imageFiles.push(zipEntry);
                 });
                 imageFiles.sort((a, b) => a.name.localeCompare(b.name, undefined, {numeric: true}));
-                
                 if (imageFiles.length > 0) {
                     const savedIndex = localStorage.getItem('viewer_cbz_' + currentFileIdentifier);
-                    if (savedIndex !== null && confirm("이전에 읽던 위치가 있습니다. 이어서 보시겠습니까?")) {
-                        currentIndex = parseInt(savedIndex, 10);
-                    } else {
-                        currentIndex = 0;
-                    }
+                    if (savedIndex !== null && confirm("이전 위치에서 이어서 보시겠습니까?")) { currentIndex = parseInt(savedIndex, 10); }
                     refreshViewer();
-                } else {
-                    alert("이미지 파일이 없습니다.");
                 }
-            } catch (error) { alert("파일 처리 오류가 발생했습니다."); }
+            } catch (error) { alert("파일 처리 오류"); }
         }
 
         function refreshViewer() {
@@ -276,7 +255,6 @@
             pageInfo.textContent = `${index + 1} / ${imageFiles.length}`;
             prevBtn.disabled = (index === 0); nextBtn.disabled = (index === imageFiles.length - 1);
             window.scrollTo(0, 0);
-
             localStorage.setItem('viewer_cbz_' + currentFileIdentifier, index);
         }
 
